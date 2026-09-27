@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!--
+  motion-explainer: one shape that never cuts. 1,833 marks are the bill: thin CSV rows streaming,
+  then they fold into a grid of resources, then they settle into the real treemap of the run.
+  Same capture contract as the kit: __DURATION_S, __animate, __frame(i, total), __ready.
+-->
+<style>
+/*FONTS*/
+:root { --bg: #0a1712; --ink: #eef3e6; --lime: #c8f23a; --mute: #8fa597; --coral: #ff6b4a; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--bg); color: var(--ink);
+             font-family: "SG", sans-serif; -webkit-font-smoothing: antialiased; }
+canvas { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; }
+.head { position: absolute; left: 70px; right: 70px; top: 70px; }
+.head .k { font-family: "JB", monospace; font-size: 30px; font-weight: 700; color: var(--lime); letter-spacing: 1px; }
+.head .h { font-size: 76px; font-weight: 700; line-height: 1.02; letter-spacing: -3px; margin-top: 18px; }
+.head .h b { color: var(--lime); font-weight: 700; }
+.kk { font-family: "JB", monospace; font-size: 30px; font-weight: 700; color: var(--lime); letter-spacing: 1px; }
+.beat { position: absolute; left: 70px; right: 70px; top: 70px; opacity: 0; }
+.cap { position: absolute; left: 70px; right: 70px; top: 1090px; font-size: 44px; font-weight: 600; line-height: 1.15;
+       letter-spacing: -1px; }
+.cap .n { font-family: "JB", monospace; font-weight: 700; color: var(--lime); }
+.cap .s { display: block; font-size: 30px; color: var(--mute); font-weight: 500; margin-top: 12px; letter-spacing: 0; }
+.lab { position: absolute; font-family: "JB", monospace; font-size: 28px; font-weight: 700; color: var(--ink); background: #0a1712cc; padding: 2px 10px; border-radius: 8px;
+       opacity: 0; white-space: nowrap; }
+#tip { position: absolute; background: var(--ink); color: var(--bg); border-radius: 18px; padding: 18px 24px;
+       font-size: 34px; font-weight: 700; line-height: 1.15; opacity: 0; box-shadow: 0 20px 60px #0008; }
+#tip span { display: block; font-family: "JB", monospace; font-size: 28px; color: #2f4a3c; margin-top: 6px; }
+#end { position: absolute; inset: 0; background: var(--lime); color: #0a1712; padding: 150px 70px 0; transform: translateY(1350px); }
+#end .big { font-size: 128px; font-weight: 700; letter-spacing: -5px; line-height: 0.98; }
+#end p { font-size: 44px; font-weight: 600; margin-top: 30px; line-height: 1.2; letter-spacing: -0.5px; }
+#end p b { font-family: "JB", monospace; }
+#end .foot { position: absolute; left: 70px; right: 70px; bottom: 80px; font-family: "JB", monospace; font-size: 32px; font-weight: 700; }
+#bar { position: absolute; left: 0; top: 1330px; height: 20px; background: var(--lime); z-index: 9; }
+</style>
+</head>
+<body>
+<canvas id="c" width="2160" height="2700"></canvas>
+<div class="head" id="h0"><div class="k">AWS COST AND USAGE REPORT</div>
+  <div class="h"><b id="rowsN"></b> bill lines<br>mapped per resource<br>in <b id="secN"></b></div></div>
+<div class="beat" id="h1"><div class="kk">1 &middot; THE RAW BILL</div></div>
+<div class="beat" id="h2"><div class="kk">2 &middot; FOLD BY RESOURCE</div></div>
+<div class="beat" id="h3"><div class="kk">3 &middot; THE MAP</div></div>
+<div class="cap" id="cap"></div>
+<div id="labs"></div>
+<div id="tip"></div>
+<div id="end"><div class="big"></div><div class="ps"></div><div class="foot">billtree &middot; open source &middot; MIT<br>built with Claude Opus 5.5</div></div>
+<div id="bar"></div>
+<script id="race-data" type="application/json">__RACE_JSON__</script>
+<script>
+window.__DURATION_S = 24;
+const D = JSON.parse(document.getElementById('race-data').textContent);
+const $ = (s) => document.querySelector(s);
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const SVC = ['#c8f23a', '#5ad1c8', '#ffb347', '#ff6b4a', '#9b8cff', '#e8e3d3', '#6fbf8f', '#f2d25c'];
+const cv = $('#c'), g = cv.getContext('2d'); g.scale(2, 2);
+
+$('#rowsN').textContent = fmt(D.rows);
+$('#secN').textContent = D.seconds + ' s';
+for (const k of ['h1', 'h2', 'h3']) {
+  const h = document.createElement('div'); h.className = 'h'; h.style.cssText = 'font-size:72px;font-weight:700;letter-spacing:-2.5px;line-height:1.04;margin-top:18px';
+  $('#' + k).appendChild(h);
+}
+$('#h1 .h').innerHTML = `${D.mb} MB of CSV.<br>One line per hour, per thing.`;
+$('#h2 .h').innerHTML = `${fmt(D.rows)} lines<br>become <span style="color:var(--lime)">${fmt(D.resources)}</span> resources.`;
+$('#h3 .h').innerHTML = `Every box is one<br>resource you pay for.`;
+const labs = D.labels.map(([name, x, y, share]) => {
+  const d = document.createElement('div'); d.className = 'lab'; d.textContent = `${name} ${share}`;
+  d.style.left = x + 'px'; d.style.top = y + 'px'; $('#labs').appendChild(d); return d; });
+const [tx, ty, tw, th] = D.top.rect;
+$('#tip').innerHTML = `One EC2 instance: ${D.top.cost}<span>${D.top.share} of the whole bill</span>`;
+$('#tip').style.left = Math.min(tx + tw + 16, 560) + 'px'; $('#tip').style.top = Math.max(ty + th / 2 - 60, 380) + 'px';
+$('#end .big').innerHTML = `${D.json_kb} KB<br>your AI agent<br>reads in one go.`;
+[`Total matches the bill to the cent: <b>${D.total}</b>`, `${D.ram} MB of RAM. Standard library. $0.`].forEach((l) => {
+  const p = document.createElement('p'); p.innerHTML = l; $('#end .ps').appendChild(p); });
+
+// three places for every mark: a streaming CSV row, a grid cell, its treemap box
+const N = D.rects.length, COLS = 60, CELL = 940 / COLS;
+const marks = D.rects.map((r, i) => {
+  const gi = i, gx = 70 + (gi % COLS) * CELL, gy = 380 + Math.floor(gi / COLS) * CELL;
+  return { row: i, grid: [gx + 2, gy + 2, CELL - 4, CELL - 4], box: r.slice(0, 4), svc: r[4], seed: (i * 7919) % 97 / 97 };
+});
+const lerp = (a, b, k) => a + (b - a) * k;
+const CAPS = [
+  [0, 2.8, `<span class="n">${fmt(D.rows)}</span> lines in. <span class="n">${D.seconds} s</span> out.<span class="s">Open source, runs on your own export</span>`],
+  [2.8, 8.2, `Reading <span class="n" id="cnt"></span> rows<span class="s">legacy CUR and CUR 2.0, .csv or .csv.gz</span>`],
+  [8.2, 13.2, `<span class="n">${fmt(D.resources)}</span> resources<span class="s">account &gt; service &gt; region &gt; resource</span>`],
+  [13.2, 19.4, `Biggest box first<span class="s">treemap, JSON and a top list from one pass</span>`],
+];
+let capNow = -1;
+
+window.__frame = function (i, total) {
+  const n = total || Math.round(window.__DURATION_S * 60);
+  const t = (n > 1 ? i / (n - 1) : 0) * window.__DURATION_S;
+  $('#bar').style.width = (1080 * t / window.__DURATION_S) + 'px';
+  // headlines
+  const h0 = 1 - ease(span(t, 2.4, 3.0));
+  $('#h0').style.opacity = h0; $('#h0').style.transform = `translateY(${-40 * (1 - h0)}px)`;
+  [['h1', 2.8, 8.0], ['h2', 8.2, 13.0], ['h3', 13.2, 19.2]].forEach(([id, a, b]) => {
+    const k = ease(span(t, a, a + 0.5)) * (1 - ease(span(t, b - 0.4, b)));
+    $('#' + id).style.opacity = k; $('#' + id).style.transform = `translateY(${30 * (1 - k)}px)`;
+  });
+  const ci = CAPS.findIndex(([a, b]) => t >= a && t < b);
+  if (ci !== capNow) { capNow = ci; $('#cap').innerHTML = ci >= 0 ? CAPS[ci][2] : ''; }
+  const cfade = t < 19.4 ? 1 : 0; $('#cap').style.opacity = cfade;
+  const cnt = document.getElementById('cnt'); if (cnt) cnt.textContent = fmt(D.rows * ease(span(t, 3.0, 7.8)));
+  // the one shape
+  g.clearRect(0, 0, 1080, 1350);
+  const fold = ease(span(t, 8.2, 11.0)), settle = ease(span(t, 12.4, 15.2));
+  const scroll = t * 180;
+  for (const m of marks) {
+    // stream: rows 6 px tall scroll upward through the canvas area
+    const sy = 380 + ((m.row * 7 - scroll) % 680 + 680) % 680;
+    const sw = 300 + 640 * m.seed;
+    let x, y, w, h;
+    const st = [70, sy, sw, 3];
+    const k1 = clamp(fold * 1.35 - m.seed * 0.35), k2 = clamp(settle * 1.3 - (1 - m.seed) * 0.3);
+    const wave = 4 * Math.sin(t * 4 - m.row * 0.045) * k1 * (1 - k2);
+    x = lerp(lerp(st[0], m.grid[0], ease(k1)), m.box[0], ease(k2));
+    y = lerp(lerp(st[1], m.grid[1], ease(k1)), m.box[1], ease(k2)) + wave;
+    w = lerp(lerp(st[2], m.grid[2], ease(k1)), m.box[2] - 1, ease(k2));
+    h = lerp(lerp(st[3], m.grid[3], ease(k1)), m.box[3] - 1, ease(k2));
+    const col = SVC[m.svc % SVC.length];
+    g.globalAlpha = lerp(0.35 + 0.4 * m.seed, 0.95, Math.max(ease(k1), ease(k2)));
+    g.fillStyle = k1 < 0.5 && k2 === 0 ? '#8fa597' : col;
+    g.fillRect(x, y, Math.max(w, 0.5), Math.max(h, 0.5));
+  }
+  g.globalAlpha = 1;
+  // focus on the biggest resource
+  const f = ease(span(t, 15.6, 16.3)) * (1 - ease(span(t, 19.2, 19.6)));
+  if (f > 0) {
+    g.strokeStyle = '#eef3e6'; g.lineWidth = 6 * f; g.strokeRect(tx - 3, ty - 3, tw + 6, th + 6);
+    g.fillStyle = `rgba(10,23,18,${0.55 * f})`;
+    g.beginPath(); g.rect(0, 360, 1080, 700); g.rect(tx + tw, ty, -tw, th); g.fill('evenodd');
+  }
+  const tipk = ease(span(t, 16.0, 16.6)) * (1 - ease(span(t, 19.2, 19.6)));
+  $('#tip').style.opacity = tipk; $('#tip').style.transform = `translateY(${20 * (1 - tipk)}px) scale(${0.96 + 0.04 * tipk + 0.01 * span(t, 16, 19.4)})`;
+  const lk = ease(span(t, 14.6, 15.4)) * (1 - 0.7 * f);
+  labs.forEach((l) => { l.style.opacity = lk; });
+  const e = ease(span(t, 19.4, 20.2));
+  $('#end').style.transform = `translateY(${(1 - e) * 1350}px)`;
+  $('#bar').style.background = e > 0.5 ? '#0a1712' : '#c8f23a';
+  $('#end .big').style.transform = `translateX(${-24 * span(t, 20.2, 24)}px)`;
+};
+window.__frame(0, Math.round(window.__DURATION_S * 60));
+window.__ready = true;
+if (window.__animate !== false) {
+  const total = Math.round(window.__DURATION_S * 60);
+  let fr = 0;
+  (function loop() { if (window.__animate === false) return; window.__frame(fr % total, total); fr++;
+    requestAnimationFrame(loop); })();
+}
+</script>
+</body>
+</html>
